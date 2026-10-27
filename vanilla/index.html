@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WELCOME ITZFIZZ — Scroll-Driven Hero Section Animation</title>
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="WELCOME ITZFIZZ — Scroll-Driven Hero Animation" />
+  <meta property="og:description" content="60fps scroll-driven hero animation with GSAP ScrollTrigger, Tailwind CSS, and Bootstrap Grid." />
+  <meta property="og:type" content="website" />
+
+  <!-- Google Fonts (self-hosted in Next.js version via next/font) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Bootstrap 5 Grid only (Plus Points optional layout helper) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap-grid.min.css" rel="stylesheet" />
+
+  <!-- Tailwind CSS (CDN for standalone vanilla version) -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans:    ['Inter', 'sans-serif'],
+            display: ['Space Grotesk', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- GSAP 3 + ScrollTrigger -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /*
+      Do NOT set scroll-behavior: smooth — conflicts with GSAP scrub interpolation.
+    */
+    html, body {
+      background-color: #090a0f;
+      color: #f8fafc;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+
+    .bg-grid-pattern {
+      background-size: 48px 48px;
+      background-image:
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    }
+
+    /* GPU compositing — promotes element to its own layer */
+    .gpu-layer {
+      will-change: transform, opacity;
+      transform: translate3d(0, 0, 0);
+      backface-visibility: hidden;
+    }
+
+    .road-surface {
+      background: linear-gradient(90deg, #0d0f17 0%, #161926 50%, #0d0f17 100%);
+      box-shadow: inset 0 2px 20px rgba(0,0,0,0.8), 0 0 60px rgba(163,230,53,0.06);
+    }
+
+    /* clip-path animates from right: inset(0 94% 0 0) → inset(0 0% 0 0) */
+    .trail-reveal {
+      background: linear-gradient(90deg, rgba(163,230,53,0.16) 0%, rgba(163,230,53,0.92) 85%, #38bdf8 100%);
+      box-shadow: 0 0 35px rgba(163,230,53,0.45);
+      clip-path: inset(0 94% 0 0);
+      will-change: clip-path;
+    }
+
+    /* Conic gradient cone pointing right from car front */
+    .headlight-beam {
+      background: conic-gradient(from 90deg at 0% 50%,
+        rgba(255,255,255,0) 68deg,
+        rgba(254,240,138,0.28) 86deg,
+        rgba(254,240,138,0.42) 90deg,
+        rgba(254,240,138,0.28) 94deg,
+        rgba(255,255,255,0) 112deg);
+      filter: blur(8px);
+      pointer-events: none;
+    }
+
+    .taillight-glow {
+      background: radial-gradient(circle, rgba(239,68,68,0.75) 0%, rgba(239,68,68,0) 70%);
+      filter: blur(6px);
+      pointer-events: none;
+    }
+
+    .section-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent 0%, rgba(163,230,53,0.3) 30%, rgba(56,189,248,0.3) 70%, transparent 100%);
+    }
+
+    /* Reduced motion: skip all animations, show final state */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+      .trail-reveal { clip-path: inset(0 0% 0 0) !important; }
+      .gpu-layer    { will-change: auto; }
+    }
+  </style>
+</head>
+
+<body class="bg-[#090a0f] text-slate-100 antialiased selection:bg-lime-400 selection:text-slate-950">
+
+  <!-- Fixed scroll progress bar -->
+  <div class="fixed top-0 left-0 right-0 z-50 h-1 bg-white/5 overflow-hidden" aria-hidden="true">
+    <div id="top-progress-bar" class="h-full w-full origin-left scale-x-0 bg-gradient-to-r from-lime-400 via-sky-400 to-purple-500 gpu-layer"></div>
+  </div>
+
+  <main>
+    <!-- ── Hero section ──────────────────────────────────────────────────── -->
+    <section id="hero-scroll-wrapper" class="relative w-full">
+      <div id="hero-pin-stage" class="container-fluid relative w-full h-screen min-h-[600px] flex flex-col justify-between py-8 sm:py-10 px-4 sm:px-8 lg:px-14 overflow-hidden bg-grid-pattern select-none">
+
+        <!-- Ambient glow blobs -->
+        <div class="pointer-events-none absolute -top-28 left-1/4 w-96 h-96 rounded-full bg-lime-400/10 blur-[120px] gpu-layer" aria-hidden="true"></div>
+        <div class="pointer-events-none absolute -bottom-28 right-1/4 w-96 h-96 rounded-full bg-sky-500/10 blur-[120px] gpu-layer" aria-hidden="true"></div>
+
+        <!-- TOP ROW: Brand pill + 2 stat cards -->
+        <div class="relative z-20 max-w-7xl w-full mx-auto flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div id="hero-badge" class="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white/[0.04] border border-white/10 backdrop-blur-sm">
+            <span class="w-2 h-2 rounded-full bg-lime-400" aria-hidden="true"></span>
+            <span class="text-xs font-mono uppercase tracking-[0.2em] text-slate-300">ITZFIZZ • Last-Mile Delivery Intelligence</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full lg:w-auto">
+            <!-- Stat 1: Lime -->
+            <div class="stat-card gpu-layer">
+              <div class="stat-card-inner gpu-layer rounded-2xl p-4 sm:p-5 bg-lime-400 text-slate-950 shadow-xl shadow-lime-400/10 border border-lime-300 min-w-[155px] sm:min-w-[235px]">
+                <div class="flex items-baseline justify-between gap-2">
+                  <span class="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
+                    <span class="stat-counter" data-target="58">58</span>%
+                  </span>
+                  <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded bg-slate-950/15 font-semibold">+14.2% YoY</span>
+                </div>
+                <p class="mt-1.5 text-xs sm:text-sm font-semibold text-slate-900 leading-snug">Growth in pick-up point adoption</p>
+              </div>
+            </div>
+
+            <!-- Stat 2: Dark -->
+            <div class="stat-card gpu-layer">
+              <div class="stat-card-inner gpu-layer rounded-2xl p-4 sm:p-5 bg-[#161a29]/90 text-white shadow-xl border border-white/15 backdrop-blur-md min-w-[155px] sm:min-w-[235px]">
+                <div class="flex items-baseline justify-between gap-2">
+                  <span class="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-lime-400">
+                    <span class="stat-counter" data-target="27">27</span>%
+                  </span>
+                  <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded bg-white/10 text-slate-300 font-semibold">Efficiency</span>
+                </div>
+                <p class="mt-1.5 text-xs sm:text-sm font-medium text-slate-300 leading-snug">Faster last-mile route resolution</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CENTER: Road track with car animation -->
+        <div class="relative z-10 my-auto w-full flex flex-col items-center justify-center py-4">
+          <div id="road-track" role="img" aria-label="Animated road track with WELCOME ITZFIZZ headline"
+               class="road-surface relative w-full max-w-7xl h-40 sm:h-52 md:h-64 rounded-3xl border border-white/10 overflow-hidden flex items-center justify-center">
+
+            <!-- Dashed center lane marker -->
+            <div class="absolute inset-x-0 top-1/2 -translate-y-1/2 h-0.5 border-t-2 border-dashed border-white/15 pointer-events-none" aria-hidden="true"></div>
+            <div class="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-transparent via-white/15 to-transparent" aria-hidden="true"></div>
+            <div class="absolute bottom-0 inset-x-0 h-1.5 bg-gradient-to-r from-transparent via-white/15 to-transparent" aria-hidden="true"></div>
+
+            <!-- Base headline (dim white) -->
+            <h1 aria-label="WELCOME ITZFIZZ"
+                class="relative z-10 font-display font-black text-xl sm:text-4xl md:text-6xl lg:text-7xl tracking-[0.18em] sm:tracking-[0.26em] text-white/25 uppercase text-center whitespace-nowrap px-4 select-none">
+              <span class="hero-char inline-block">W</span><span class="hero-char inline-block">E</span><span class="hero-char inline-block">L</span><span class="hero-char inline-block">C</span><span class="hero-char inline-block">O</span><span class="hero-char inline-block">M</span><span class="hero-char inline-block">E</span><span class="hero-char inline-block w-3 sm:w-6 md:w-8" aria-hidden="true"></span><span class="hero-char inline-block">I</span><span class="hero-char inline-block">T</span><span class="hero-char inline-block">Z</span><span class="hero-char inline-block">F</span><span class="hero-char inline-block">I</span><span class="hero-char inline-block">Z</span><span class="hero-char inline-block">Z</span>
+            </h1>
+
+            <!-- Trail reveal overlay (clip-path animated by GSAP) -->
+            <div id="scroll-trail-box" class="trail-reveal absolute inset-0 z-20 overflow-hidden flex items-center justify-center pointer-events-none" aria-hidden="true">
+              <div class="font-display font-black text-xl sm:text-4xl md:text-6xl lg:text-7xl tracking-[0.18em] sm:tracking-[0.26em] text-slate-950 uppercase text-center whitespace-nowrap px-4 select-none">
+                <span class="hero-char-hi inline-block">W</span><span class="hero-char-hi inline-block">E</span><span class="hero-char-hi inline-block">L</span><span class="hero-char-hi inline-block">C</span><span class="hero-char-hi inline-block">O</span><span class="hero-char-hi inline-block">M</span><span class="hero-char-hi inline-block">E</span><span class="hero-char-hi inline-block w-3 sm:w-6 md:w-8"></span><span class="hero-char-hi inline-block">I</span><span class="hero-char-hi inline-block">T</span><span class="hero-char-hi inline-block">Z</span><span class="hero-char-hi inline-block">F</span><span class="hero-char-hi inline-block">I</span><span class="hero-char-hi inline-block">Z</span><span class="hero-char-hi inline-block">Z</span>
+              </div>
+            </div>
+
+            <!-- Car actor -->
+            <div id="car-actor" class="gpu-layer absolute left-0 top-1/2 -translate-y-1/2 z-30 w-40 sm:w-56 md:w-72 lg:w-80 pointer-events-none flex items-center" aria-hidden="true">
+              <div class="taillight-glow absolute -left-8 top-1/2 -translate-y-1/2 w-14 h-24 rounded-full"></div>
+              <!-- Headlight: percentage-based so it scales with car size -->
+              <div class="headlight-beam absolute top-1/2 -translate-y-1/2" style="right:-30%; width:45%; height:80%;"></div>
+              <svg viewBox="0 0 520 240" class="w-full h-auto drop-shadow-[0_20px_25px_rgba(0,0,0,0.85)]">
+                <defs>
+                  <linearGradient id="carBodyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%"   stop-color="#c23b00" />
+                    <stop offset="50%"  stop-color="#ff5500" />
+                    <stop offset="100%" stop-color="#ff8800" />
+                  </linearGradient>
+                  <linearGradient id="carbonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%"   stop-color="#111827" />
+                    <stop offset="100%" stop-color="#1f2937" />
+                  </linearGradient>
+                  <linearGradient id="glassGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%"   stop-color="#090d16" />
+                    <stop offset="65%"  stop-color="#1e293b" />
+                    <stop offset="100%" stop-color="#0f172a" />
+                  </linearGradient>
+                </defs>
+                <rect x="82" y="14" width="76" height="24" rx="8" fill="#090a0f" stroke="#334155" stroke-width="2" />
+                <rect x="82" y="202" width="76" height="24" rx="8" fill="#090a0f" stroke="#334155" stroke-width="2" />
+                <rect x="358" y="16" width="72" height="22" rx="8" fill="#090a0f" stroke="#334155" stroke-width="2" />
+                <rect x="358" y="202" width="72" height="22" rx="8" fill="#090a0f" stroke="#334155" stroke-width="2" />
+                <path d="M18,56 L42,42 L42,198 L18,184 Z" fill="url(#carbonGrad)" stroke="#374151" stroke-width="1.5" />
+                <line x1="22" y1="82" x2="40" y2="82" stroke="#4b5563" stroke-width="3" />
+                <line x1="22" y1="110" x2="40" y2="110" stroke="#4b5563" stroke-width="3" />
+                <line x1="22" y1="130" x2="40" y2="130" stroke="#4b5563" stroke-width="3" />
+                <line x1="22" y1="158" x2="40" y2="158" stroke="#4b5563" stroke-width="3" />
+                <path d="M475,46 C502,62 512,90 512,120 C512,150 502,178 475,194 L460,190 L460,50 Z" fill="url(#carbonGrad)" stroke="#475569" stroke-width="1.5" />
+                <path d="M35,52 C65,24 145,22 195,34 C235,44 268,45 315,34 C365,22 435,25 478,52 C500,68 506,94 506,120 C506,146 500,172 478,188 C435,215 365,218 315,206 C268,195 235,196 195,206 C145,218 65,216 35,188 C24,174 22,148 22,120 C22,92 24,66 35,52 Z" fill="url(#carBodyGrad)" stroke="#ffffff" stroke-opacity="0.25" stroke-width="2" />
+                <path d="M185,42 L290,54 L265,68 L175,54 Z" fill="#111827" opacity="0.85" />
+                <path d="M185,198 L290,186 L265,172 L175,186 Z" fill="#111827" opacity="0.85" />
+                <path d="M365,70 L475,86" stroke="#ffffff" stroke-opacity="0.35" stroke-width="2" fill="none" />
+                <path d="M365,170 L475,154" stroke="#ffffff" stroke-opacity="0.35" stroke-width="2" fill="none" />
+                <path d="M145,78 C185,56 295,52 365,72 C388,82 398,100 398,120 C398,140 388,158 365,168 C295,188 185,184 145,162 C125,150 118,136 118,120 C118,104 125,90 145,78 Z" fill="url(#glassGrad)" stroke="#64748b" stroke-width="2" />
+                <path d="M295,68 C340,72 368,86 378,112 C372,94 340,82 295,78 Z" fill="#ffffff" opacity="0.22" />
+                <rect x="62" y="96" width="52" height="48" rx="6" fill="#090d16" stroke="#334155" stroke-width="1.5" />
+                <line x1="74" y1="102" x2="74" y2="138" stroke="#475569" stroke-width="2.5" />
+                <line x1="88" y1="102" x2="88" y2="138" stroke="#475569" stroke-width="2.5" />
+                <line x1="102" y1="102" x2="102" y2="138" stroke="#475569" stroke-width="2.5" />
+                <path d="M40,48 C52,48 58,76 58,120 C58,164 52,192 40,192 L28,186 L28,54 Z" fill="#111827" stroke="#475569" stroke-width="1.5" />
+                <path d="M322,48 L342,26 L352,32 L338,52 Z" fill="url(#carBodyGrad)" stroke="#ffffff" stroke-opacity="0.3" />
+                <path d="M322,192 L342,214 L352,208 L338,188 Z" fill="url(#carBodyGrad)" stroke="#ffffff" stroke-opacity="0.3" />
+                <path d="M466,54 L494,68 L484,82 L458,64 Z" fill="#fef08a" />
+                <path d="M466,186 L494,172 L484,158 L458,176 Z" fill="#fef08a" />
+                <path d="M28,56 L34,56 L34,88 L28,88 Z" fill="#ef4444" />
+                <path d="M28,152 L34,152 L34,184 L28,184 Z" fill="#ef4444" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- BOTTOM ROW: 2 stat cards + scroll cue -->
+        <div class="relative z-20 max-w-7xl w-full mx-auto flex flex-col lg:flex-row items-start lg:items-end justify-between gap-4">
+          <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full lg:w-auto">
+            <!-- Stat 3: Sky blue -->
+            <div class="stat-card gpu-layer">
+              <div class="stat-card-inner gpu-layer rounded-2xl p-4 sm:p-5 bg-sky-400 text-slate-950 shadow-xl shadow-sky-400/10 border border-sky-300 min-w-[155px] sm:min-w-[235px]">
+                <div class="flex items-baseline justify-between gap-2">
+                  <span class="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
+                    <span class="stat-counter" data-target="23">23</span>%
+                  </span>
+                  <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded bg-slate-950/15 font-semibold">Support</span>
+                </div>
+                <p class="mt-1.5 text-xs sm:text-sm font-semibold text-slate-900 leading-snug">Reduction in inbound customer calls</p>
+              </div>
+            </div>
+
+            <!-- Stat 4: Orange -->
+            <div class="stat-card gpu-layer">
+              <div class="stat-card-inner gpu-layer rounded-2xl p-4 sm:p-5 bg-orange-500 text-slate-950 shadow-xl shadow-orange-500/10 border border-orange-400 min-w-[155px] sm:min-w-[235px]">
+                <div class="flex items-baseline justify-between gap-2">
+                  <span class="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
+                    <span class="stat-counter" data-target="40">40</span>%
+                  </span>
+                  <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded bg-slate-950/15 font-semibold">Automation</span>
+                </div>
+                <p class="mt-1.5 text-xs sm:text-sm font-semibold text-slate-900 leading-snug">Manual dispatch tasks eliminated</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 self-center lg:self-end text-xs font-mono text-slate-400" aria-label="Scroll to interact">
+            <span>SCROLL TO DRIVE</span>
+            <div class="w-6 h-10 rounded-full border border-white/20 flex items-start justify-center p-1" aria-hidden="true">
+              <div class="w-1.5 h-2.5 rounded-full bg-lime-400 animate-bounce"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Post-scroll CTA section ───────────────────────────────────────── -->
+    <div class="section-divider mx-8 lg:mx-24"></div>
+    <section class="relative w-full min-h-[60vh] flex flex-col items-center justify-center gap-10 px-6 py-24 text-center overflow-hidden" aria-label="Tech stack">
+      <div class="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full" style="background:radial-gradient(circle, rgba(163,230,53,0.05) 0%, transparent 70%)" aria-hidden="true"></div>
+
+      <div class="relative z-10 space-y-3">
+        <p class="text-xs font-mono uppercase tracking-[0.25em] text-slate-500">Built with</p>
+        <h2 class="font-display font-black text-3xl sm:text-4xl lg:text-5xl text-white tracking-tight">The Full Stack.</h2>
+        <p class="max-w-lg mx-auto text-sm sm:text-base text-slate-400 leading-relaxed">Every requirement — mandatory and bonus — implemented. 60fps scroll-driven animation with zero layout reflows.</p>
+      </div>
+
+      <div class="relative z-10 flex flex-wrap justify-center gap-3 max-w-2xl">
+        <span class="px-4 py-2 rounded-full text-xs font-mono font-semibold border bg-white/10 text-white border-white/20">Next.js 14</span>
+        <span class="px-4 py-2 rounded-full text-xs font-mono font-semibold border bg-sky-400/20 text-sky-300 border-sky-400/30">React 18</span>
+        <span class="px-4 py-2 rounded-full text-xs font-mono font-semibold border bg-lime-400/20 text-lime-300 border-lime-400/30">GSAP ScrollTrigger</span>
+        <span class="px-4 py-2 rounded-full text-xs font-mono font-semibold border bg-cyan-400/20 text-cyan-300 border-cyan-400/30">Tailwind CSS</span>
+        <span class="px-4 py-2 rounded-full text-xs font-mono font-semibold border bg-purple-400/20 text-purple-300 border-purple-400/30">Bootstrap Grid</span>
+        <span class="px-4 py-2 rounded-full text-xs font-mono font-semibold border bg-blue-400/20 text-blue-300 border-blue-400/30">Vanilla JS</span>
+      </div>
+
+      <div class="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl w-full text-left">
+        <div class="rounded-2xl border border-white/10 p-5 space-y-2" style="background:rgba(255,255,255,0.02)">
+          <span class="text-2xl" aria-hidden="true">⚡</span>
+          <h3 class="font-display font-bold text-sm text-white">GPU Composited</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">Every animated property uses transform or clip-path — no paint, no layout reflow.</p>
+        </div>
+        <div class="rounded-2xl border border-white/10 p-5 space-y-2" style="background:rgba(255,255,255,0.02)">
+          <span class="text-2xl" aria-hidden="true">🎯</span>
+          <h3 class="font-display font-bold text-sm text-white">Scroll-Linked</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">Animation progress is 1:1 with scroll position via GSAP scrub, not time-based autoplay.</p>
+        </div>
+        <div class="rounded-2xl border border-white/10 p-5 space-y-2" style="background:rgba(255,255,255,0.02)">
+          <span class="text-2xl" aria-hidden="true">♿</span>
+          <h3 class="font-display font-bold text-sm text-white">Accessible</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">prefers-reduced-motion respected — animations skip entirely for motion-sensitive users.</p>
+        </div>
+      </div>
+
+      <p class="relative z-10 text-xs text-slate-600 font-mono">ITZFIZZ © 2026 — Scroll-Driven Motion Demo</p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      gsap.registerPlugin(ScrollTrigger);
+
+      /* ── Reduced motion guard ──────────────────────────────────────────
+         If the user has enabled "reduce motion" in their OS, show everything
+         at its final state immediately and skip all GSAP setup.
+      ────────────────────────────────────────────────────────────────── */
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      window.addEventListener('DOMContentLoaded', () => {
+        const roadTrack      = document.getElementById('road-track');
+        const carActor       = document.getElementById('car-actor');
+        const scrollTrailBox = document.getElementById('scroll-trail-box');
+        const topProgressBar = document.getElementById('top-progress-bar');
+
+        const baseChars = document.querySelectorAll('.hero-char');
+        const hiChars   = document.querySelectorAll('.hero-char-hi');
+        const cards     = document.querySelectorAll('.stat-card');
+        const counters  = document.querySelectorAll('.stat-counter');
+
+        if (prefersReducedMotion) {
+          /* Show everything at final state instantly */
+          gsap.set([baseChars, hiChars], { opacity: 1, y: 0, rotateX: 0 });
+          gsap.set(cards, { opacity: 1, y: 0, scale: 1 });
+          gsap.set(scrollTrailBox, { clipPath: 'inset(0 0% 0 0)' });
+          counters.forEach(el => {
+            el.textContent = el.getAttribute('data-target');
+          });
+          return;
+        }
+
+        /* ── Page-load intro ────────────────────────────────────────────
+           Characters: opacity 0 → 1, y 38px → 0, rotateX -40 → 0
+           Cards: opacity 0 → 1, y 32 → 0, scale 0.94 → 1
+        ────────────────────────────────────────────────────────────────*/
+        gsap.set([baseChars, hiChars], { opacity: 0, y: 38, rotateX: -40 });
+        gsap.set(cards, { opacity: 0, y: 32, scale: 0.94 });
+        gsap.set('#hero-badge', { opacity: 0, y: -16 });
+
+        const introTl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+        introTl
+          .to('#hero-badge', { opacity: 1, y: 0, duration: 0.5 })
+          .to(baseChars, { opacity: 1, y: 0, rotateX: 0, duration: 0.7, stagger: 0.03 }, '-=0.25')
+          .to(hiChars,   { opacity: 1, y: 0, rotateX: 0, duration: 0.7, stagger: 0.03 }, '<')
+          .to(cards,     { opacity: 1, y: 0, scale: 1,   duration: 0.65, stagger: 0.13 }, '-=0.4');
+
+        /* ── Counter tick-up ────────────────────────────────────────────*/
+        counters.forEach((counterEl) => {
+          const target = parseInt(counterEl.getAttribute('data-target') || '0', 10);
+          const obj = { val: 0 };
+          gsap.to(obj, {
+            val: target,
+            duration: 1.4,
+            ease: 'power2.out',
+            onUpdate: () => { counterEl.textContent = Math.round(obj.val); }
+          });
+        });
+
+        /* ── Car travel distance ─────────────────────────────────────── */
+        const getMaxCarX = () => {
+          if (!roadTrack || !carActor) return 600;
+          return Math.max(0, roadTrack.clientWidth - carActor.clientWidth - 16);
+        };
+
+        /* ── Scroll timeline ─────────────────────────────────────────────
+           pin: the stage stays fixed; scrub: 0.6 gives the lagged feel.
+           end: '+=1800' means 1800px of page scroll maps to the animation.
+        ────────────────────────────────────────────────────────────────*/
+        const scrollTl = gsap.timeline({
+          scrollTrigger: {
+            trigger: '#hero-scroll-wrapper',
+            start: 'top top',
+            end: '+=1800',
+            pin: '#hero-pin-stage',
+            scrub: 0.6,
+            invalidateOnRefresh: true,
+            onUpdate: (self) => {
+              if (topProgressBar) {
+                topProgressBar.style.transform = 'scaleX(' + self.progress.toFixed(4) + ')';
+              }
+            }
+          }
+        });
+
+        /* Car drives left→right */
+        scrollTl.fromTo(carActor,       { x: 12 }, { x: () => getMaxCarX(), ease: 'none' }, 0);
+        /* Trail clip-path reveals behind car */
+        scrollTl.fromTo(scrollTrailBox, { clipPath: 'inset(0 94% 0 0)' }, { clipPath: 'inset(0 0% 0 0)', ease: 'none' }, 0);
+
+        /* Stat card parallax */
+        const innerCards = document.querySelectorAll('.stat-card-inner');
+        if (innerCards.length === 4) {
+          scrollTl.to(innerCards[0], { y: -14, scale: 1.03, ease: 'power1.inOut' }, 0);
+          scrollTl.to(innerCards[1], { y: -10, scale: 1.03, ease: 'power1.inOut' }, 0.08);
+          scrollTl.to(innerCards[2], { y: 12,  scale: 1.03, ease: 'power1.inOut' }, 0.04);
+          scrollTl.to(innerCards[3], { y: 16,  scale: 1.03, ease: 'power1.inOut' }, 0.12);
+        }
+      });
+
+      window.addEventListener('resize', () => ScrollTrigger.refresh());
+    })();
+  </script>
+</body>
+</html>

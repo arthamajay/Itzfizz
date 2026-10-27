@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Reset ────────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ─── Base ─────────────────────────────────────────────────────────────────── */
+/*
+  IMPORTANT: Do NOT add scroll-behavior: smooth here.
+  GSAP ScrollTrigger scrub manages its own interpolation — native smooth
+  scroll conflicts with scrub and creates double-easing artifacts.
+*/
+html,
+body {
+  background-color: #090a0f;
+  color: #f8fafc;
+  font-family: var(--font-inter, "Inter", sans-serif);
+  overflow-x: hidden;
+}
+
+/* ─── Subtle dot-grid background ───────────────────────────────────────────── */
+.bg-grid-pattern {
+  background-size: 48px 48px;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+/* ─── GPU compositing layer ─────────────────────────────────────────────────
+   Applied to every animated element so the browser promotes them to their
+   own compositor layer. This means transforms and opacity changes happen
+   entirely on the GPU — zero layout/paint cost per frame.
+─────────────────────────────────────────────────────────────────────────── */
+.gpu-layer {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+/* ─── Road / track surface ──────────────────────────────────────────────────
+   Dark gradient that fades to the edges, giving depth to the "road".
+   Subtle lime glow in box-shadow ties it to the trail color.
+─────────────────────────────────────────────────────────────────────────── */
+.road-surface {
+  background: linear-gradient(90deg, #0d0f17 0%, #161926 50%, #0d0f17 100%);
+  box-shadow:
+    inset 0 2px 20px rgba(0, 0, 0, 0.8),
+    0 0 60px rgba(163, 230, 53, 0.06);
+}
+
+/* ─── Trail reveal ──────────────────────────────────────────────────────────
+   This is the colored overlay that gets clipped from left→right as the
+   car drives. clip-path: inset() is a pure compositor operation (no repaint).
+   GSAP animates the right value of inset() from 94% → 0%.
+─────────────────────────────────────────────────────────────────────────── */
+.trail-reveal {
+  background: linear-gradient(
+    90deg,
+    rgba(163, 230, 53, 0.16) 0%,
+    rgba(163, 230, 53, 0.92) 85%,
+    #38bdf8 100%
+  );
+  box-shadow: 0 0 35px rgba(163, 230, 53, 0.45);
+  clip-path: inset(0 94% 0 0);
+  will-change: clip-path;
+}
+
+/* ─── Headlight beam ────────────────────────────────────────────────────────
+   conic-gradient creates a cone of light shooting forward from the car nose.
+   blur(8px) softens it into a realistic spread.
+─────────────────────────────────────────────────────────────────────────── */
+.headlight-beam {
+  background: conic-gradient(
+    from 90deg at 0% 50%,
+    rgba(255, 255, 255, 0) 68deg,
+    rgba(254, 240, 138, 0.28) 86deg,
+    rgba(254, 240, 138, 0.42) 90deg,
+    rgba(254, 240, 138, 0.28) 94deg,
+    rgba(255, 255, 255, 0) 112deg
+  );
+  filter: blur(8px);
+  pointer-events: none;
+}
+
+/* ─── Taillight glow ────────────────────────────────────────────────────────
+   radial red gradient behind the car rear — simulates brake light scatter.
+─────────────────────────────────────────────────────────────────────────── */
+.taillight-glow {
+  background: radial-gradient(
+    circle,
+    rgba(239, 68, 68, 0.75) 0%,
+    rgba(239, 68, 68, 0) 70%
+  );
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+/* ─── Section divider ───────────────────────────────────────────────────────
+   Used between hero and the CTA section below.
+─────────────────────────────────────────────────────────────────────────── */
+.section-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(163, 230, 53, 0.3) 30%,
+    rgba(56, 189, 248, 0.3) 70%,
+    transparent 100%
+  );
+}
+
+/* ─── Accessibility: Reduced motion ─────────────────────────────────────────
+   Users who set "Reduce motion" in their OS preferences get zero-duration
+   transitions and no scroll-driven animation. GSAP's matchMedia detects
+   the same query and skips the ScrollTrigger setup entirely.
+─────────────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .trail-reveal {
+    /* Show trail fully revealed so content is still visible */
+    clip-path: inset(0 0% 0 0) !important;
+  }
+
+  .gpu-layer {
+    will-change: auto;
+  }
+}
